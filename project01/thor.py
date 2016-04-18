@@ -4,12 +4,13 @@ import getopt
 import logging
 import os
 import socket
+import time
 import sys
 
 # Constants
 
-ADDRESS  = '127.0.0.1'
-PORT     = 9234
+PROCESSES =1
+REQUESTS=1
 PROGRAM  = os.path.basename(sys.argv[0])
 LOGLEVEL = logging.INFO
 
@@ -31,12 +32,17 @@ Options:
 
 class TCPClient(object):
 
-    def __init__(self, address=ADDRESS, port=PORT):
+    def __init__(self, address, port):
         ''' Construct TCPClient object with the specified address and port '''
         self.logger  = logging.getLogger()                              # Grab logging instance
         self.socket  = socket.socket(socket.AF_INET, socket.SOCK_STREAM)# Allocate TCP socket
         self.address = socket.gethostbyname(address)                                          # Store address to listen on
         self.port    = port                                             # Store port to lisen on
+        self.logger.debug("URL:\t{}".format(self.url))
+        self.logger.debug("HOST:\t{}".format(self.host))
+        self.logger.debug("PORT:\t{}".format(self.port))
+        self.logger.debug("PATH:\t{}".format(self.path))
+
 
     def handle(self):
         ''' Handle connection '''
@@ -79,48 +85,79 @@ class TCPClient(object):
 # HTTP Class
 
 class HTTPClient(TCPClient):
-    def __init__(self, address, port, path):
-        TCPClient.__init__(self, address, port) #Initalize base class
-        self.path = path
-        self.host = address
-        self.url = url #WHERE TO PARSE?!?!?
+    def __init__(self, url):
+        #parse
+        self.url = url.split('://')[-1]
+
+        if '/' not in self.url:
+            self.path = '/'
+        else:
+            self.path = '/' + self.url.split('/',1)[-1]
+
+        if ':' not in self.url:
+            self.port = int(80)
+            if '/' not in self.url:
+                self.host = self.url
+            else:
+                self.host = self.url.split('/',1)[0]
+        else:
+            self.port = self.url.split(':',1)[-1]
+            self.host = self.url.split(':',1)[0]
+            self.port = int(self.port.split('/',1)[0])
+        self.address = socket.gethostbyname(self.host)
+        TCPClient.__init__(self, self.address, self.port) #Initalize base class
+
 
     def handle(self):
         ''' Handle connection by reading data and then writing it back until EOF '''
         self.logger.debug('Handle')
 
         #SEND REQUEST
+        self.logger.debug('Sending request...')
         self.stream.write('GET {} HTTP/1.0\r\n'.format(self.path))
         self.stream.write('Host: {}\r\n'.format(self.host))
         self.stream.write('\r\n')
 
+        #PRINTS TO STDOUT
+        self.stream.flush()
+        self.logger.debug('Receiving response...')
         data = self.stream.readline()
         while data:
-            sys.stdout.write(data)
             data = self.stream.readline()
-
-
+            sys.stdout.write(data)
 
 # Main Execution
-
+count =1
 if __name__ == '__main__': #guard code
     # Parse command-line arguments
     try:
-        options, arguments = getopt.getopt(sys.argv[1:], "hv")
+        options, arguments = getopt.getopt(sys.argv[1:], "hvr:p:")
     except getopt.GetoptError as e:
         usage(1)
 
     for option, value in options:
         if option == '-v':
             LOGLEVEL = logging.DEBUG
-        else:
+            count+=1
+        elif option == '-r':
+            REQUESTS = value
+            count+=2
+        elif option == '-p':
+            PROCESSES = value
+            count+=2
+        elif option == '-h':
             usage(1)
 
+    try:
+        URL = sys.argv[int(count)]
+    except IndexError:
+        usage(1)
+    '''
     if len(arguments) >= 1:
         ADDRESS = arguments[0]
     if len(arguments) >= 2:
         PORT    = int(arguments[1])
-
+    '''
     # Set logging level
     logging.basicConfig(
         level   = LOGLEVEL,
@@ -128,21 +165,50 @@ if __name__ == '__main__': #guard code
         datefmt = '%Y-%m-%d %H:%M:%S',
     )
 
-    # Lookup host address
+    ''' # Lookup host address
     try:
         ADDRESS = socket.gethostbyname(ADDRESS)
     except socket.gaierror as e:
         logging.error('Unable to lookup {}: {}'.format(ADDRESS, e))
-        sys.exit(1)
+        sys.exit(1) '''
 
     # Instantiate and run client
 
-    #for process in PROCESSES:
-    #    for request in REQUESTS:
-    client=HTTPClient(URL)
-    try:
-        client.run()
-    except KeyboardInterrupt:
-        sys.exit(0)
+    for process in range(int(PROCESSES)):
+        START = time.time()
+        try:
+            pid = os.fork()
+        except OSError as e:
+            print "fork failed: {}".format(e)
+        if pid == 0:
+            for request in range(int(REQUESTS)):
+                client=HTTPClient(URL)
+                try:
+                    client.run()
+                except KeyboardInterrupt:
+                    sys.exit(0)
+            END = time.time()
+            pid = os.getpid()
+            average = (END-START) / float(PROCESSES)
+            elapsed = END - START
+            logging.debug("{0} | Elapsed time: {1:.2f} seconds".format(pid, elapsed))
+            logging.debug("{0} | Average elapsed time: {1:.2f} seconds".format(pid, average))
+            os._exit(0)
+
+
+    for process in range(int(PROCESSES)):
+        try:
+            pid, status = os.wait()
+            print "PID: {} return with exit code {}".format(os.getpid(), status)
+        except:
+            pass
+
+        ''' END = time.time()
+        pid = os.getpid()
+        average = (END-START) / float(PROCESSES)
+        elapsed = END - START
+        logging.debug("{0} | Elapsed time: {1:.2f} seconds".format(pid, elapsed))
+        logging.debug("{0} | Average elapsed time: {1:.2f} seconds".format(pid, average))
+        '''
 
 # vim: set sts=4 sw=4 ts=8 expandtab ft=python:

@@ -3,6 +3,7 @@
 import getopt
 import logging
 import os
+import mimetypes
 import socket
 import sys
 
@@ -97,6 +98,21 @@ class HTTPHandler(BaseHandler):
         ''' Handle connection by reading data and then writing it back until EOF '''
         self.debug('Handle')
         self._parse_request()
+
+        self.uripath = os.path.normpath(self.docroot + os.environ['REQUEST_URI'])
+
+        if os.path.exists(self.uripath) or not self.uripath.startswith(self.root):
+            self._handle_error(404)
+        if os.path.isfile(self.uripath) and os.access(self.uripath, X_OK):
+            self._handle_script()
+        elif os.path.isfile(self.uripath) and os.access(self.uripath, R_OK):
+            self._handle_file()
+        elif os.path.isdir(self.uripath) and os.access(self.uripath,R_OK):
+            self._handle_directory()
+        else:
+            self._handle_error(403)
+
+        '''
         try:
             data = self.stream.readline().rstrip()
             while data:
@@ -110,6 +126,7 @@ class HTTPHandler(BaseHandler):
             self.stream.write('\r\n')
         except socket.error:
             pass    # Ignore socket errors
+        '''
 
     def _parse_request(self):
         os.environ['REMOTE_ADDR'] = self.address.split(':',1)[0]
@@ -154,14 +171,53 @@ class HTTPHandler(BaseHandler):
         mimetype, _ = mimetypes.guess_type(self.uripath)
         if mimetype is None:
             mimetype = 'application/octet-stream'
+        self.stream.write('HTTP/1.0 200 OK\r\n')
+        self.stream.write('Content-Type: {}\r\n'.format(mimetype))
+        self.stream.write('\r\n')
+        try:
+            data = self.stream.readline().rstrip()
+            while data:
+                self.debug('Read {}', data)
+                self.stream.write(data)
+                self.stream.flush()
+                data = self.stream.readline().rstrip()
+        except socket.error:
+            pass
 
-    #def _handle_directory(self):
+    def _handle_directory(self):
         #construct HTML page that lists contents of directory
+        self.stream.write('HTTP/1.o 200 OK\r\n')
+        self.stream.write('Content-Type: text/html\r\n')
+        self.stream.write('\r\n')
+        self.stream.write('<h1>Directory Listing: {}</h1>'.format(DOCROOT))
+        self.stream.write('''<table style="width:100%">
+                            <tr>
+                                <td><b>Type</b></td>
+                                <td><b>Name</b></td>
+                                <td><b>Size</b></td>
+                            </tr>''')
+        #for filename in sorted(os.listdir(DOCROOT)):
+            #self.stream.write('<tr>
+            #                        <td>{}</td>
+            #                        <td>{}</td>
+            #                        <td>{}</td>
+            #                    </tr>'.format(os.stat(filename).
 
     #def _handle_script(self):
         #use os.popen to exectue sctrips
 
-
+    def _handle_error(self,error_code):
+        if error_code == '403':
+            self.stream.write('HTTP/1.0 {} Forbidden\r\n'.format(error_code))
+            self.stream.write('Content-Type: text/html\r\n')
+            self.stream.write('\r\n')
+            #write image
+            #self.stream.write('<img src="">')
+        elif error_code == 404:
+            self.stream.write('HTTP/1.0 {} Not Found\r\n'.format(error_code))
+            self.stream.write('Content-Type: text/html\r\n')
+            self.stream.write('\r\n')
+            #image
 
 # TCPServer Class
 

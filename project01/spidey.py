@@ -189,20 +189,51 @@ class HTTPHandler(BaseHandler):
         self.stream.write('HTTP/1.o 200 OK\r\n')
         self.stream.write('Content-Type: text/html\r\n')
         self.stream.write('\r\n')
-        self.stream.write('<h1>Directory Listing: {}</h1>'.format(DOCROOT))
-        self.stream.write('''<table style="width:100%">
-                            <tr>
-                                <td><b>Type</b></td>
-                                <td><b>Name</b></td>
-                                <td><b>Size</b></td>
-                            </tr>''')
-        #for filename in sorted(os.listdir(DOCROOT)):
-            #self.stream.write('<tr>
-            #                        <td>{}</td>
-            #                        <td>{}</td>
-            #                        <td>{}</td>
-            #                    </tr>'.format(os.stat(filename).
+        self.stream.write('''
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                <title>{}</title>
+                <link href="https://www3.nd.edu/~pbui/static/css/blugold.css" rel="stylesheet">
+                <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css" rel="stylesheet">
+                </head>'''.format(DOCROOT))
+        self.stream.write('''
+                <body>
+                        <div class="container">
+                                <div class="page-header">
+                                        <h2>Directory Listing: {}</h2>
+                                </div>
+                        <table class="table table-striped">
+                        <thead>
+                        <th>Type</th>
+                        <th>Name</th>
+                        <th>Size</th>
+                        </thead>
+                        <tbody>'''.format(DOCROOT))
 
+        for name in sorted(os.listdir(DOCROOT)):
+                pathName = os.path.join(DOCROOT,name)
+                if os.path.isdir(pathName):
+                         self.stream.write('''
+                                <tr>
+                                        <td><i class="fa fa-folder-o"></i></td>
+                                        <td><a href={}>{}</a></td>
+                                        <td>-</td>
+                                </tr>'''.format(pathName, pathName))
+                if os.path.isfile(pathName):
+                        self.stream.write('''
+                                <tr>
+                                        <td><i class="fa fa-file-o"></i></td>
+                                        <td><a href="/hello.html">hello.html</a></td>
+                                        <td>275</td>
+                                </tr>'''.format(pathName, pathName, os.path.getSixe(pathName)))
+        self.stream.write('''
+                        </tbody>
+                        </table>
+                </div>
+                </body>
+                </html>''')
+    
     #def _handle_script(self):
         #use os.popen to exectue sctrips
 

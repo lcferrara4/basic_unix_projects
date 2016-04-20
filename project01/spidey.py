@@ -214,27 +214,34 @@ class HTTPHandler(BaseHandler):
 
         for name in sorted(os.listdir(self.uripath)):
                 pathName = os.path.join(self.uripath,name)
-                print os.environ['HTTP_HOST'] + pathName.split(self.docroot)[1]
+                #print os.environ['HTTP_HOST'] + pathName.split(self.docroot)[1]
                 if os.path.isdir(pathName):
-                         self.stream.write('''
-                                <tr>
-                                        <td><i class="fa fa-folder-o"></i></td>
-                                        <td><a href={}>{}</a></td>
-                                        <td>-</td>
-                                </tr>'''.format(pathName.split(self.uripath)[1], os.path.basename(pathName)))
-                if os.path.isfile(pathName):
-                        self.stream.write('''
-                                <tr>
-                                        <td><i class="fa fa-file-o"></i></td>
-                                        <td><a href="/{}">{}</a></td>
-                                        <td>{}</td>
-                                </tr>'''.format(os.environ['HTTP_HOST'] + pathName.split(self.docroot)[1], os.path.basename(pathName), os.path.getsize(pathName)))
+                        pathType = "fa fa-folder-o"
+                        pathSize = '-'
+                elif os.path.isfile(pathName):
+                        mimetype, _ = mimetypes.guess_type(pathName)
+                        if mimetype is None:
+                            mimetype = 'application/octet-stream'
+                        if mimetype == 'text/plain':
+                            pathType = "fa fa-file-text-o"
+                        elif os.access(pathName, os.X_OK):
+                            pathType = "fa fa-file-code-o"
+                        else:
+                            pathType = "fa fa-file-o"
+                        pathSize = os.path.getsize(pathName)
+                self.stream.write('''        
+                        <tr>
+                            <td><i class="{}"></i></td>
+                            <td><a href="/{}">{}</a></td>
+                            <td>{}</td>
+                        </tr>'''.format(pathType, os.environ['HTTP_HOST'] + pathName.split(self.docroot)[1], os.path.basename(pathName), pathSize))
         self.stream.write('''
-                        </tbody>
-                        </table>
-                </div>
-                </body>
-                </html>''')
+                    </tbody>
+                    </table>
+                    </div>
+                    </body>
+                    </html>''')
+                    #.format(pathName.split(self.uripath)[1], os.path.basename(pathName)))
         #os.environ['REQUEST_URI']
         #os.environ['HTTP_HOST'] +pathName.split(self.docroot)[1],
     

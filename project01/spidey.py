@@ -100,10 +100,12 @@ class HTTPHandler(BaseHandler):
         self.debug('Handle')
         self._parse_request()
 
+        print 'self.uripath'
         self.uripath = os.path.normpath(self.docroot + os.environ['REQUEST_URI'])
         #self.uripath=os.path.normpath(os.environ['REQUEST_URI'])
 
         print self.uripath
+        print 'self.docroot'
         print self.docroot
 
         if not os.path.exists(self.uripath) or not self.uripath.startswith(self.docroot):
@@ -121,20 +123,27 @@ class HTTPHandler(BaseHandler):
     def _parse_request(self):
         self.debug('Parsing Request')
         os.environ['REMOTE_ADDR'] = self.address.split(':',1)[0]
-
+        
         #Read stream and set REQUEST_METHOD
         data = self.stream.readline().strip().split()
+
+        # parses extra host name, still causing probelms
+        try:
+            data[1] = data[1].split(os.environ['HTTP_HOST'])[1]
+        except:
+            pass
+
         self.debug('Parsing {}'.format(data))
         os.environ['REQUEST_METHOD'] = data[0]
         try:
-            os.environ['REQUEST_URI'] = data[0].split('?')[0]
+            os.environ['REQUEST_URI'] = data[1].split('?')[0]
             os.environ['QUERY_STRING'] =data[1].split('?')[1]
         except:
             os.environ['REQUEST_URI'] = data[1]
             os.environ['QUERY_STRING']=''
         data = self.stream.readline().strip().split()
         os.environ['HTTP_HOST'] = data[1]
-
+        
         data = self.stream.readline().strip().split()
         os.environ['HTTP_CONNECTION'] = data[1]
 
@@ -162,21 +171,18 @@ class HTTPHandler(BaseHandler):
 
         self.debug('Parsed')
 
-
     def _handle_file(self):
         print "in handle file"
         mimetype, _ = mimetypes.guess_type(self.uripath)
         if mimetype is None:
             mimetype = 'application/octet-stream'
+        print mimetype
         self.stream.write('HTTP/1.0 200 OK\r\n')
         self.stream.write('Content-Type: {}\r\n'.format(mimetype))
         self.stream.write('\r\n')
-        self.stream.write('<p>')
-        for line in open(self.uripath,'r+b'):
-            self.stream.write('<p>')
+        for line in open(self.uripath, 'r+b'):
+            #open(self.docroot,'r+b'):
             self.stream.write(line)
-            self.stream.write('</p>')
-            self.stream.flush()
 
     def _handle_directory(self):
         #construct HTML page that lists contents of directory
@@ -208,8 +214,7 @@ class HTTPHandler(BaseHandler):
 
         for name in sorted(os.listdir(self.uripath)):
                 pathName = os.path.join(self.uripath,name)
-                print pathName
-                print "ADDRESS:", self.address #.split('/')[0]
+                print os.environ['HTTP_HOST'] + pathName.split(self.docroot)[1]
                 if os.path.isdir(pathName):
                          self.stream.write('''
                                 <tr>
@@ -223,21 +228,28 @@ class HTTPHandler(BaseHandler):
                                         <td><i class="fa fa-file-o"></i></td>
                                         <td><a href="/{}">{}</a></td>
                                         <td>{}</td>
-                                </tr>'''.format(pathName.split(self.docroot)[1], os.path.basename(pathName), os.path.getsize(pathName)))
+                                </tr>'''.format(os.environ['HTTP_HOST'] + pathName.split(self.docroot)[1], os.path.basename(pathName), os.path.getsize(pathName)))
         self.stream.write('''
                         </tbody>
                         </table>
                 </div>
                 </body>
                 </html>''')
-
+        #os.environ['REQUEST_URI']
+        #os.environ['HTTP_HOST'] +pathName.split(self.docroot)[1],
+    
     def _handle_script(self):
         signal.signal(signal.SIGCHLD,signal.SIG_DFL) #set SIGCHLD
-        for line in os.popen(self.uripath):
-            print line
-            self.stream.write(line)
+        if os.environ['QUERY_STRING'] == '':
+            for line in os.popen(self.uripath):
+                print line
+                self.stream.write(line)
+        else:
+            print "query string != blank"
+            for line in os.popen(self.uripath):
+                print line
+                self.stream.write(line.format(os.environ['QUERY_STRING'].split('=')[1]))
         signal.signal(signal.SIGCHLD,signal.SIG_IGN)
-
 
     def _handle_error(self,error_code):
         print "in error"

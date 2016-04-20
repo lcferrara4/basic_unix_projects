@@ -3,6 +3,7 @@
 import getopt
 import logging
 import os
+import signal
 import mimetypes
 import socket
 import sys
@@ -37,13 +38,13 @@ Options:
 
 class BaseHandler(object):
 
-    def __init__(self, fd, address):
+    def __init__(self, fd, address,docroot):
         ''' Construct handler from file descriptor and remote client address '''
         self.logger  = logging.getLogger()        # Grab logging instance
         self.socket  = fd                         # Store socket file descriptor
         self.address = '{}:{}'.format(*address)   # Store address
+        self.docroot = os.path.abspath(docroot)
         self.stream  = self.socket.makefile('w+') # Open file object from file descriptor
-
         self.debug('Connect')
 
     def debug(self, message, *args):
@@ -91,8 +92,8 @@ class BaseHandler(object):
 # HTTP Handler Class
 
 class HTTPHandler(BaseHandler):
-    def __init__(self, fd, address, docroot=None):
-        BaseHandler.__init__(self,fd,address)
+    def __init__(self, fd, address, docroot):
+        BaseHandler.__init__(self,fd,address,docroot)
 
     def handle(self):
         ''' Handle connection by reading data and then writing it back until EOF '''
@@ -100,93 +101,87 @@ class HTTPHandler(BaseHandler):
         self._parse_request()
 
         self.uripath = os.path.normpath(self.docroot + os.environ['REQUEST_URI'])
+        #self.uripath=os.path.normpath(os.environ['REQUEST_URI'])
 
-        if os.path.exists(self.uripath) or not self.uripath.startswith(self.root):
+        print self.uripath
+        print self.docroot
+
+        if not os.path.exists(self.uripath) or not self.uripath.startswith(self.docroot):
             self._handle_error(404)
-        if os.path.isfile(self.uripath) and os.access(self.uripath, X_OK):
+        elif os.path.isfile(self.uripath) and os.access(self.uripath, os.X_OK):
             self._handle_script()
-        elif os.path.isfile(self.uripath) and os.access(self.uripath, R_OK):
+        elif os.path.isfile(self.uripath) and os.access(self.uripath, os.R_OK):
             self._handle_file()
-        elif os.path.isdir(self.uripath) and os.access(self.uripath,R_OK):
+        elif os.path.isdir(self.uripath) and os.access(self.uripath,os.R_OK):
             self._handle_directory()
         else:
             self._handle_error(403)
 
-        '''
-        try:
-            data = self.stream.readline().rstrip()
-            while data:
-                self.debug('Read {}', data)
-                self.stream.write(data)
-                sys.stdout.write(data)
-                self.stream.flush()
-                data = self.stream.readline().rstrip()
-            self.stream.write('HTTP/1.0 200 OK\r\n')
-            self.stream.write('Content-Type: text/html\r\n')
-            self.stream.write('\r\n')
-        except socket.error:
-            pass    # Ignore socket errors
-        '''
 
     def _parse_request(self):
+        self.debug('Parsing Request')
         os.environ['REMOTE_ADDR'] = self.address.split(':',1)[0]
 
         #Read stream and set REQUEST_METHOD
         data = self.stream.readline().strip().split()
+        self.debug('Parsing {}'.format(data))
         os.environ['REQUEST_METHOD'] = data[0]
-        os.environ['REQUEST_URI'] = data[1].split('?')[0]
-        os.environ['QUERY_STRING'] =data[1].split('?')[1]
+        try:
+            os.environ['REQUEST_URI'] = data[0].split('?')[0]
+            os.environ['QUERY_STRING'] =data[1].split('?')[1]
+        except:
+            os.environ['REQUEST_URI'] = data[1]
+            os.environ['QUERY_STRING']=''
+        data = self.stream.readline().strip().split()
+        os.environ['HTTP_HOST'] = data[1]
 
         data = self.stream.readline().strip().split()
-        os.environ['HTTP_HOST'] = data [1]
-
-        data = self.stream.readline().strip.split()
         os.environ['HTTP_CONNECTION'] = data[1]
 
         data = self.stream.readline()
-        data = self.stream.readline().strip.split()
+        data = self.stream.readline().strip().split()
         os.environ['HTTP_ACCEPT']=data[1]
 
-        data = self.stream.readline().strip.split()
+        data = self.stream.readline().strip().split()
         os.environ['HTTP_UPGRADE_INSECURE_REQUESTS']=data[1]
 
-        data = self.stream.readline().strip.split()
-        os.environ['HTTP_USER_AGENT']=data[1:]
+        data = self.stream.readline().strip().split(': ')
+        os.environ['HTTP_USER_AGENT']=data[1]
 
-        data = self.stream.readline().strip.split()
-        os.environ['HTTP_ACCEPT_ENCODING']=data[1:]
+        data = self.stream.readline().strip().split(': ')
+        os.environ['HTTP_ACCEPT_ENCODING']=data[1]
 
-        data = self.stream.readline().strip.split()
+        data = self.stream.readline().strip().split()
         os.environ['HTTP_ACCEPT_LANGUAGE']=data[1]
 
         os.environ['HTTP_REFERER']='http://'+os.getenv('HTTP_HOST')+'/'+os.getenv('REQUEST_URI').split('/')[1]
 
-        os.environ['REMOTE_ADDR']=socket.gethostbyname(os.getenv('HTTP_HOST').split(':')[0])
+        os.environ['REMOTE_ADDR']=self.address[0]
         os.environ['REMOTE_HOST']=os.getenv('REMOTE_ADDR')
-        os.environ['REMOTE_PORT']=(socket.accept()[1])[1]
+        os.environ['REMOTE_PORT']=self.address[1]
 
+        self.debug('Parsed')
 
 
     def _handle_file(self):
+        print "in handle file"
         mimetype, _ = mimetypes.guess_type(self.uripath)
         if mimetype is None:
             mimetype = 'application/octet-stream'
         self.stream.write('HTTP/1.0 200 OK\r\n')
         self.stream.write('Content-Type: {}\r\n'.format(mimetype))
         self.stream.write('\r\n')
-        try:
-            data = self.stream.readline().rstrip()
-            while data:
-                self.debug('Read {}', data)
-                self.stream.write(data)
-                self.stream.flush()
-                data = self.stream.readline().rstrip()
-        except socket.error:
-            pass
+        self.stream.write('<p>')
+        for line in open(self.uripath,'r+b'):
+            self.stream.write('<p>')
+            self.stream.write(line)
+            self.stream.write('</p>')
+            self.stream.flush()
 
     def _handle_directory(self):
         #construct HTML page that lists contents of directory
-        self.stream.write('HTTP/1.o 200 OK\r\n')
+        print "in handle directory"
+        self.stream.write('HTTP/1.0 200 OK\r\n')
         self.stream.write('Content-Type: text/html\r\n')
         self.stream.write('\r\n')
         self.stream.write('''
@@ -196,7 +191,7 @@ class HTTPHandler(BaseHandler):
                 <title>{}</title>
                 <link href="https://www3.nd.edu/~pbui/static/css/blugold.css" rel="stylesheet">
                 <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css" rel="stylesheet">
-                </head>'''.format(DOCROOT))
+                </head>'''.format(os.path.basename(self.uripath)))
         self.stream.write('''
                 <body>
                         <div class="container">
@@ -209,58 +204,69 @@ class HTTPHandler(BaseHandler):
                         <th>Name</th>
                         <th>Size</th>
                         </thead>
-                        <tbody>'''.format(DOCROOT))
+                        <tbody>'''.format(os.path.basename(self.uripath)))
 
-        for name in sorted(os.listdir(DOCROOT)):
-                pathName = os.path.join(DOCROOT,name)
+        for name in sorted(os.listdir(self.uripath)):
+                pathName = os.path.join(self.uripath,name)
+                print pathName
+                print "ADDRESS:", self.address #.split('/')[0]
                 if os.path.isdir(pathName):
                          self.stream.write('''
                                 <tr>
                                         <td><i class="fa fa-folder-o"></i></td>
                                         <td><a href={}>{}</a></td>
                                         <td>-</td>
-                                </tr>'''.format(pathName, pathName))
+                                </tr>'''.format(pathName.split(self.uripath)[1], os.path.basename(pathName)))
                 if os.path.isfile(pathName):
                         self.stream.write('''
                                 <tr>
                                         <td><i class="fa fa-file-o"></i></td>
-                                        <td><a href="/hello.html">hello.html</a></td>
-                                        <td>275</td>
-                                </tr>'''.format(pathName, pathName, os.path.getSixe(pathName)))
+                                        <td><a href="/{}">{}</a></td>
+                                        <td>{}</td>
+                                </tr>'''.format(pathName.split(self.docroot)[1], os.path.basename(pathName), os.path.getsize(pathName)))
         self.stream.write('''
                         </tbody>
                         </table>
                 </div>
                 </body>
                 </html>''')
-    
-    #def _handle_script(self):
-        #use os.popen to exectue sctrips
+
+    def _handle_script(self):
+        signal.signal(signal.SIGCHLD,signal.SIG_DFL) #set SIGCHLD
+        for line in os.popen(self.uripath):
+            print line
+            self.stream.write(line)
+        signal.signal(signal.SIGCHLD,signal.SIG_IGN)
+
 
     def _handle_error(self,error_code):
+        print "in error"
         if error_code == '403':
+            print error_code
             self.stream.write('HTTP/1.0 {} Forbidden\r\n'.format(error_code))
             self.stream.write('Content-Type: text/html\r\n')
             self.stream.write('\r\n')
             #write image
-            #self.stream.write('<img src="">')
+            self.stream.write('<img src="http://www.icge.co.uk/languagesciencesblog/wp-content/uploads/2014/04/you_shall_not_pass1.jpg">')
         elif error_code == 404:
+            print error_code
             self.stream.write('HTTP/1.0 {} Not Found\r\n'.format(error_code))
             self.stream.write('Content-Type: text/html\r\n')
             self.stream.write('\r\n')
-            #image
+            self.stream.write('<img src="http://www.icge.co.uk/languagesciencesblog/wp-content/uploads/2014/04/you_shall_not_pass1.jpg">')
 
 # TCPServer Class
 
 class TCPServer(object):
 
-    def __init__(self, address=ADDRESS, port=PORT, handler=HTTPHandler):
+    def __init__(self, address=ADDRESS, port=PORT, docroot=DOCROOT, handler=HTTPHandler):
         ''' Construct TCPServer object with the specified address, port, and
         handler '''
         self.logger  = logging.getLogger()                              # Grab logging instance
         self.socket  = socket.socket(socket.AF_INET, socket.SOCK_STREAM)# Allocate TCP socket
         self.address = address                                          # Store address to listen on
         self.port    = port                                             # Store port to lisen on
+        self.docroot = docroot
         self.handler = handler                                          # Store handler for incoming connections
 
     def run(self):
@@ -283,7 +289,7 @@ class TCPServer(object):
 
             # Instantiate handler, handle connection, finish connection
             try:
-                handler = self.handler(client, address)
+                handler = self.handler(client, address, self.docroot)
                 handler.handle()
             except Exception as e:
                 handler.exception('Exception: {}', e)
@@ -319,7 +325,7 @@ if __name__ == '__main__':
     )
 
     # Instantiate and run server
-    server = TCPServer(ADDRESS,PORT,HTTPHandler)
+    server = TCPServer(ADDRESS,PORT,DOCROOT,HTTPHandler)
 
     try:
         server.run()

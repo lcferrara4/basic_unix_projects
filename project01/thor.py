@@ -123,8 +123,8 @@ class HTTPClient(TCPClient):
         self.logger.debug('Receiving response...')
         data = self.stream.readline()
         while data:
-            data = self.stream.readline()
             sys.stdout.write(data)
+            data = self.stream.readline()
 
 # Main Execution
 count =1

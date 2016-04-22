@@ -10,9 +10,9 @@ import getopt
 #constatss
 
 ALPHABET = string.ascii_lowercase + string.digits
-LENGTH = int(sys.argv[1])
+LENGTH = 8
 #ATTEMPTS = int(sys.argv[2]) cause doing it systematically
-HASHES = sys.argv[3]
+HASHES = 'hashes.txt'
 PREFIX = ''
 
 
@@ -33,47 +33,36 @@ Options:
 def md5sum(s):
 	return hashlib.md5(s).hexdigest()
 
+#Parse Command Line
 
+try:
+	options, arguments = getopt.getopt(sys.argv[1:], "a:l:s:p:")
+except getopt.GetoptError:
+	usage(1)
+
+for option, value in options:
+    if option == '-a':
+		ALPHABET = str(value)
+    elif option == '-l':
+		LENGTH = int(value)
+    elif option == '-p':
+		PREFIX = str(value)
+    elif option == '-s':
+		HASHES = str(value)
+    else:
+        usage(1)
 
 #Main Exacution
 
 if __name__ == '__main__':
-	# Parsing the command line
-	count = 1
-	try:
-		options, arguments = getopt.getopt(sys.argv[1:], "a:l:s:p:")
-	except getopt.GetoptError as e:
-		usage(1)
-
-	for option, value in options:
-		if option == '-a':
-			ALPHABET = str(value)
-			count+=2
-		elif option == '-l':
-			LENGTH = int(value)
-			count+=2
-		elif option == '-p':
-			PREFIX = str(value)
-			count+=2
-		elif option == '-s':
-			HASHES = str(value)
-			cout+=1
-
-
 	hashes = set([l.strip() for l in open(HASHES)])
 	found = set()
 
-	for canidate in itertools.product(ALPHABET, repeat=LENGTH):
-		canidate = ''.join(canidate)
-		#canidate = ''.join([random.choice(ALPHABET) for _ in range(LENGHT)])
-
-		print canidate # all the canidates that the hash could be
-
-		checksum = md5sum(canidate)
+	for candidate in itertools.product(ALPHABET, repeat=LENGTH):
+		candidate = ''.join(candidate)
+		checksum = md5sum(candidate)
 		if checksum in hashes:
-			#found.add(candidate) 
-			found.add(canidate)
-			print "Check sum" ,checksum
+			found.add(candidate)
 
 	for word in sorted(found):
-		print "Word" ,word
+		print word

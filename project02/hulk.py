@@ -11,10 +11,9 @@ import getopt
 
 ALPHABET = string.ascii_lowercase + string.digits
 LENGTH = 8
-#ATTEMPTS = int(sys.argv[2]) cause doing it systematically
 HASHES = 'hashes.txt'
 PREFIX = ''
-
+PREF=False
 
 #Utility functions
 
@@ -31,38 +30,40 @@ Options:
 	sys.exit(exit_code)
 
 def md5sum(s):
-	return hashlib.md5(s).hexdigest()
+    return hashlib.md5(s).hexdigest()
 
 #Parse Command Line
 
 try:
-	options, arguments = getopt.getopt(sys.argv[1:], "a:l:s:p:")
+    options, arguments = getopt.getopt(sys.argv[1:], "a:l:s:p:")
 except getopt.GetoptError:
-	usage(1)
+    usage(1)
 
 for option, value in options:
     if option == '-a':
-		ALPHABET = str(value)
+        ALPHABET=str(value)
     elif option == '-l':
-		LENGTH = int(value)
+        LENGTH = int(value)
     elif option == '-p':
-		PREFIX = str(value)
+        PREFIX=str(value)
+        PREF=True
     elif option == '-s':
-		HASHES = str(value)
+        HASHES=str(value)
     else:
         usage(1)
-
 #Main Exacution
 
 if __name__ == '__main__':
-	hashes = set([l.strip() for l in open(HASHES)])
-	found = set()
+    hashes = set([l.strip() for l in open(HASHES)])
+    found = set()
 
-	for candidate in itertools.product(ALPHABET, repeat=LENGTH):
-		candidate = ''.join(candidate)
-		checksum = md5sum(candidate)
-		if checksum in hashes:
-			found.add(candidate)
+    for candidate in itertools.product(ALPHABET, repeat=LENGTH):
+        candidate = ''.join(candidate)
+        if PREF:
+            candidate=PREFIX+candidate
+        checksum = md5sum(candidate)
+        if checksum in hashes:
+            found.add(candidate)
 
-	for word in sorted(found):
-		print word
+    for word in sorted(found):
+        print word

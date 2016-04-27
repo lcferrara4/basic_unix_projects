@@ -1,12 +1,13 @@
 Project 02: Distributed Computing
 =================================
-
-Please see the [distributed computing project] write-up.
-
-[distributed computing project]: https://www3.nd.edu/~pbui/teaching/cse.20189.sp16/homework10.html
-
 Teddy Brombach tbrombac
 
 Lauren Ferrara lferrara
 
 Emily Obaditch eobaditc
+
+1.  Hulk.py cracks passwords using a brute force method of using itertools to create different permutations of the alphabet of a certain length set by the user or the default length of 8.   The program uses the md5sum() function to check if each permutation is in the given hases source files. If the candidate for a password matches one in the hashes file then it is addad to the found list which prints the word to stdout.  Hulk.py was tested on the test hashes file in the assignment write up. We also tested hulk by running it for a length of 5 ith a rpefix of 1 to test that the output would be all the 6 etter passwords that started with the certain prefix.  
+
+2.  Fury.py as implemented using the work_queue module.  The program begins by setting the work queue using the work_queue.WorkQueue() function and loading the journal of all the previous passwords already found.  Then the program runs the command hulk.py with a length of 1 to 5.  After this the program enters into another while loop which runs hulk.py with alength of 5 and a prefix length of 1, 2, and 3 to find the 6, 7, and 8 letter passwords.  The program uses the work queue to run hulk by submitting a task with the command './hulk.py -l {}' or 'hulk.py -l 5 -p {}'. The prefixes are generating through the itertools function which returns a tuple that is joined to create the prefix.  While the work queue is not empty the json journal file is updated which is used to kepp track of the passwords found.  The journal is updated using a dict titled JOURNAL which holds the task and the specific hulk commadn that is being done.  The program writes to the journal using json.dump().  To divide up the work to different workers we ran the command "condor_submit_workers -n hulk-NETID 200."  This starts 200 workers in the Condor pool which communicate ith the master withthe name hulk-NETID.  This has to be done because while the fury program deals with distributing work to these workers it does not actually create the work queue.  Fury was testing using a small hashes file and different lengths for hulk.py.  Only one worker was used when testing, this worker was started using "work_queue_worker -d all -n hulk-NETID."  Once we verified fury was implemented corretly we ran the full program with 300 workers.  Fury recovers from failures because the journal is updated each time it is run and loaded into the variable JOURNAL in the start of the program so no time is wasted finding passwords that have already been cracked.  
+
+3. We rememebered in discrete math that we found out a longer password is better than a short complex passwords.  This was confirmed through this assignment because the passwords that took the longest were of length 7 and 8 while the shorter passwords were much easier to crack no matter how complex the password was.  The longer passwords took multiple hours to crack even with prefixing them so a long password such as "peterbuiisthebestprofessor" is much more effective than a short random password like "xbf6s1".  
